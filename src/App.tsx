@@ -1,21 +1,25 @@
+import { useMemo } from "react";
 import { Header } from "./components/Header";
 import { ChartCard } from "./components/ChartCard";
+import { DateRangeControls } from "./components/DateRangeControls";
 import { SupplyChart } from "./components/SupplyChart";
 import { useAemoData } from "./hooks/useAemoData";
+import { useDateRange } from "./hooks/useDateRange";
 import {
   beetalooProd,
-  dateSpine,
+  filterByDateWindow,
+  lngExportRows,
   operatorTotals,
   originAplngProd,
+  pivotStacked,
   prodRows,
+  prodSupplyOnDate,
   qgcProd,
   santosCsgProd,
   seriesFromKeys,
-  sumPoint,
-  totalSupplyByDate,
-  pivotStacked,
 } from "./lib/aggregate";
-import { operatorColor, seriesColor, stateColor } from "./lib/colors";
+import { lngColor, operatorColor, seriesColor, stateColor } from "./lib/colors";
+import { enumerateDateKeys, toDateKey } from "./lib/dates";
 
 const STATE_ORDER = ["QLD", "NSW", "VIC", "SA", "NT", "WA", "TAS", "ACT"];
 
@@ -31,36 +35,62 @@ function sortStates(keys: string[]): string[] {
 }
 
 export default function App() {
-  const { rows, lastDate, fetchedAt, fromCache, stale, warnings, sources, loading, error, refresh } =
+  const { rows, lastDate, minKey, maxKey, fetchedAt, fromCache, stale, warnings, sources, loading, error, refresh } =
     useAemoData();
+  const range = useDateRange(minKey, maxKey);
 
-  const prod = prodRows(rows);
-  const dates = dateSpine(prod);
-  const total = totalSupplyByDate(prod, dates);
-  const lastDayTotal = total.data.length ? sumPoint(total.data[total.data.length - 1], total.keys) : 0;
+  const lastDateKey = lastDate ? toDateKey(lastDate) : "";
+  const lastDayTotal = lastDateKey ? prodSupplyOnDate(rows, lastDateKey) : 0;
 
-  const byState = pivotStacked(prod, (r) => r.state || "Unknown", { dateKeys: dates });
+  const windowed = useMemo(
+    () => filterByDateWindow(rows, range.startKey, range.endKey),
+    [rows, range.startKey, range.endKey],
+  );
+  const dates = useMemo(
+    () => (range.startKey && range.endKey ? enumerateDateKeys(range.startKey, range.endKey) : []),
+    [range.startKey, range.endKey],
+  );
+
+  const prod = useMemo(() => prodRows(windowed), [windowed]);
+  const byState = useMemo(() => pivotStacked(prod, (r) => r.state || "Unknown", { dateKeys: dates }), [prod, dates]);
   const stateKeys = sortStates(byState.keys);
 
-  const qgc = qgcProd(rows);
-  const qgcPivot = pivotStacked(qgc, (r) => r.displayName, { dateKeys: dates });
+  const qgc = useMemo(() => qgcProd(windowed), [windowed]);
+  const qgcPivot = useMemo(() => pivotStacked(qgc, (r) => r.displayName, { dateKeys: dates }), [qgc, dates]);
 
-  const santos = santosCsgProd(rows);
-  const santosPivot = pivotStacked(santos, (r) => r.displayName, { dateKeys: dates });
+  const santos = useMemo(() => santosCsgProd(windowed), [windowed]);
+  const santosPivot = useMemo(
+    () => pivotStacked(santos, (r) => r.displayName, { dateKeys: dates }),
+    [santos, dates],
+  );
 
-  const origin = originAplngProd(rows);
-  const originPivot = pivotStacked(origin, (r) => r.displayName, { dateKeys: dates });
+  const origin = useMemo(() => originAplngProd(windowed), [windowed]);
+  const originPivot = useMemo(
+    () => pivotStacked(origin, (r) => r.displayName, { dateKeys: dates }),
+    [origin, dates],
+  );
 
-  const ops = operatorTotals(rows);
-  const opsPivot = pivotStacked(ops, (r) => r.displayName, { dateKeys: dates });
+  const ops = useMemo(() => operatorTotals(windowed), [windowed]);
+  const opsPivot = useMemo(() => pivotStacked(ops, (r) => r.displayName, { dateKeys: dates }), [ops, dates]);
   const opKeys = ["QGC", "Santos CSG", "Origin / APLNG"].filter((k) => opsPivot.keys.includes(k));
 
-  const beet = beetalooProd(rows);
-  const beetPivot = pivotStacked(beet, (r) => beetalooLabel(r.operatorName || r.displayName), {
-    dateKeys: dates,
-  });
+  const beet = useMemo(() => beetalooProd(windowed), [windowed]);
+  const beetPivot = useMemo(
+    () => pivotStacked(beet, (r) => beetalooLabel(r.operatorName || r.displayName), { dateKeys: dates }),
+    [beet, dates],
+  );
 
-  const allPivot = pivotStacked(prod, (r) => r.displayName, { dateKeys: dates });
+  const lng = useMemo(() => lngExportRows(windowed), [windowed]);
+  const lngPivot = useMemo(
+    () =>
+      pivotStacked(lng, (r) => r.displayName, {
+        dateKeys: dates,
+        getValue: (r) => r.demand,
+      }),
+    [lng, dates],
+  );
+
+  const pending = loading && rows.length === 0;
 
   return (
     <div className="app">
@@ -72,6 +102,19 @@ export default function App() {
         loading={loading}
         lastDayTotal={lastDayTotal}
         onRefresh={() => void refresh()}
+      />
+
+      <DateRangeControls
+        disabled={pending}
+        preset={range.preset}
+        startKey={range.startKey}
+        endKey={range.endKey}
+        startIndex={range.startIndex}
+        endIndex={range.endIndex}
+        maxIndex={Math.max(0, range.keys.length - 1)}
+        onPreset={range.applyPreset}
+        onStartIndex={range.setStartIndex}
+        onEndIndex={range.setEndIndex}
       />
 
       {error ? (
@@ -89,143 +132,128 @@ export default function App() {
         </div>
       ) : null}
 
-      <main className="charts">
-        <ChartCard
-          title="Total supply — last 31 days"
-          subtitle="Sum of Supply where FacilityType is PROD only. Demand, PIPE, storage and LNG export are not added."
-          empty={!loading && prod.length === 0}
-          loading={loading && prod.length === 0}
-        >
-          <SupplyChart
-            data={total.data}
-            series={seriesFromKeys(total.keys, () => "#d4a017")}
-            stacked={false}
-          />
-        </ChartCard>
-
-        <ChartCard
-          title="Total supply by state"
-          subtitle="Stacked PROD Supply by State on each gas day."
-          empty={!loading && byState.keys.length === 0}
-          loading={loading && byState.keys.length === 0}
-        >
+      <section className="chart-section">
+        <h2 className="section-title">
+          <span>1</span> Total production
+        </h2>
+        <ChartCard title="Supply by state" empty={!pending && byState.keys.length === 0} loading={pending}>
           <SupplyChart
             data={byState.data}
             series={stateKeys.map((k, i) => ({ key: k, label: k, color: stateColor(k, i) }))}
           />
         </ChartCard>
+      </section>
 
-        <ChartCard
-          title="QGC CSG production fields"
-          subtitle="OperatorName contains “QGC”. Stacked by FacilityName."
-          empty={!loading && qgc.length === 0}
-          emptyTitle="No QGC PROD facilities"
-          loading={loading && qgc.length === 0}
-        >
-          <SupplyChart
-            data={qgcPivot.data}
-            series={seriesFromKeys(qgcPivot.keys, (_, i) => seriesColor(i))}
-          />
-        </ChartCard>
+      <section className="chart-section">
+        <h2 className="section-title">
+          <span>2</span> CSG production
+        </h2>
+        <div className="charts">
+          <ChartCard title="QGC vs Santos vs Origin" empty={!pending && ops.length === 0} loading={pending}>
+            <SupplyChart
+              data={opsPivot.data}
+              series={opKeys.map((k, i) => ({ key: k, label: k, color: operatorColor(k, i) }))}
+            />
+          </ChartCard>
+          <ChartCard
+            title="QGC fields"
+            empty={!pending && qgc.length === 0}
+            emptyTitle="No QGC PROD facilities"
+            loading={pending}
+          >
+            <SupplyChart
+              data={qgcPivot.data}
+              series={seriesFromKeys(qgcPivot.keys, (_, i) => seriesColor(i))}
+            />
+          </ChartCard>
+          <ChartCard
+            title="Santos CSG fields"
+            empty={!pending && santos.length === 0}
+            emptyTitle="No Santos CSG PROD facilities"
+            loading={pending}
+          >
+            <SupplyChart
+              data={santosPivot.data}
+              series={seriesFromKeys(santosPivot.keys, (_, i) => seriesColor(i + 4))}
+            />
+          </ChartCard>
+          <ChartCard
+            title="Origin / APLNG fields"
+            empty={!pending && origin.length === 0}
+            emptyTitle="No Origin / APLNG PROD facilities"
+            loading={pending}
+          >
+            <SupplyChart
+              data={originPivot.data}
+              series={seriesFromKeys(originPivot.keys, (_, i) => seriesColor(i + 8))}
+            />
+          </ChartCard>
+        </div>
+      </section>
 
+      <section className="chart-section">
+        <h2 className="section-title">
+          <span>3</span> Beetaloo
+        </h2>
         <ChartCard
-          title="Santos CSG production fields"
-          subtitle="Santos CSG / Santos Toga plants (Fairview, Scotia, Arcadia, Roma). Conventional hubs excluded."
-          empty={!loading && santos.length === 0}
-          emptyTitle="No Santos CSG PROD facilities"
-          loading={loading && santos.length === 0}
-        >
-          <SupplyChart
-            data={santosPivot.data}
-            series={seriesFromKeys(santosPivot.keys, (_, i) => seriesColor(i + 4))}
-          />
-        </ChartCard>
-
-        <ChartCard
-          title="Origin / APLNG production fields"
-          subtitle="OperatorName matches Australia Pacific LNG or Origin. Live GBB reports Origin CSG under APLNG."
-          empty={!loading && origin.length === 0}
-          emptyTitle="No Origin / APLNG PROD facilities"
-          loading={loading && origin.length === 0}
-        >
-          <SupplyChart
-            data={originPivot.data}
-            series={seriesFromKeys(originPivot.keys, (_, i) => seriesColor(i + 8))}
-          />
-        </ChartCard>
-
-        <ChartCard
-          title="QGC vs Santos CSG vs Origin"
-          subtitle="Operator totals from the CSG field groups above — three series, not double-counted across groups."
-          empty={!loading && ops.length === 0}
-          loading={loading && ops.length === 0}
-        >
-          <SupplyChart
-            data={opsPivot.data}
-            series={opKeys.map((k, i) => ({ key: k, label: k, color: operatorColor(k, i) }))}
-          />
-        </ChartCard>
-
-        <ChartCard
-          title="Beetaloo / Sturt Plateau"
-          subtitle="FacilityId 580236 (SPCF / Sturt Plateau Gas Plant). Additional Beetaloo PROD would stack by OperatorName."
-          empty={!loading && beet.length === 0}
-          emptyTitle="No Beetaloo PROD in this extract"
-          loading={loading && beet.length === 0}
+          title="Beetaloo by operator"
+          empty={!pending && beet.length === 0}
+          emptyTitle="No Beetaloo PROD in this window"
+          loading={pending}
         >
           <SupplyChart
             data={beetPivot.data}
             series={seriesFromKeys(beetPivot.keys, (_, i) => seriesColor(i + 18))}
           />
         </ChartCard>
+      </section>
 
+      <section className="chart-section">
+        <h2 className="section-title">
+          <span>4</span> LNG export
+        </h2>
         <ChartCard
-          title="All PROD fields"
-          subtitle={`Every production facility in Last31 (${allPivot.keys.length} series). Legend scrolls; tooltip lists the largest contributors.`}
-          empty={!loading && allPivot.keys.length === 0}
-          loading={loading && allPivot.keys.length === 0}
+          title="LNG export by facility"
+          empty={!pending && lng.length === 0}
+          emptyTitle="No LNGEXPORT facilities"
+          loading={pending}
         >
           <SupplyChart
-            data={allPivot.data}
-            series={seriesFromKeys(allPivot.keys, (_, i) => seriesColor(i))}
-            scrollLegend
+            data={lngPivot.data}
+            series={seriesFromKeys(lngPivot.keys, (k, i) => lngColor(k, i))}
+            kind="bar"
           />
         </ChartCard>
-      </main>
+      </section>
 
       <footer className="site-footer">
         <p>
-          Last-day QGC {lastDaySlice(qgcPivot.data, qgcPivot.keys)} · Santos CSG{" "}
-          {lastDaySlice(santosPivot.data, santosPivot.keys)} · Origin / APLNG{" "}
-          {lastDaySlice(originPivot.data, originPivot.keys)} TJ/d
-        </p>
-        <p>
           Data:{" "}
-          <a href={sources?.flow} target="_blank" rel="noreferrer">
-            GasBBActualFlowStorageLast31.CSV
+          <a href={sources?.history} target="_blank" rel="noreferrer">
+            GasBBActualFlowStorage.zip
+          </a>
+          {" + "}
+          <a href={sources?.last31} target="_blank" rel="noreferrer">
+            Last31
           </a>
           {" · "}
           <a href={sources?.facilities} target="_blank" rel="noreferrer">
             GasBBFacilitiesFull.CSV
           </a>
           {" · "}
-          <a href="https://www.aemo.com.au/energy-systems/gas/gas-bulletin-board-gbb/data-gbb/gas-flows" target="_blank" rel="noreferrer">
+          <a
+            href="https://www.aemo.com.au/energy-systems/gas/gas-bulletin-board-gbb/data-gbb/gas-flows"
+            target="_blank"
+            rel="noreferrer"
+          >
             AEMO Gas Flows
           </a>
-          . Not an official AEMO product. Missing Supply is treated as 0.
+          . PROD charts use Supply; LNGEXPORT uses Demand (Supply is 0 in the GBB). Missing values are 0. Not an
+          official AEMO product.
         </p>
       </footer>
     </div>
   );
-}
-
-function lastDaySlice(
-  data: Array<{ date: string; dateKey: string; [series: string]: string | number }>,
-  keys: string[],
-): string {
-  if (!data.length) return "0";
-  const n = sumPoint(data[data.length - 1], keys);
-  return n.toLocaleString("en-AU", { maximumFractionDigits: 1 });
 }
 
 function beetalooLabel(operatorName: string): string {

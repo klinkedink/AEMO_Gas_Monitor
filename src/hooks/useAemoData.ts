@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchGbb, type GbbPayload } from "../lib/api";
-import { parseFacilitiesCsv, parseFlowCsv } from "../lib/csv";
-import { joinFlowWithFacilities } from "../lib/aggregate";
-import { lastGasDate } from "../lib/aggregate";
+import { parseCompactFlow } from "../lib/compact";
+import { parseFacilitiesCsv } from "../lib/csv";
+import { firstGasDate, joinFlowWithFacilities, lastGasDate } from "../lib/aggregate";
+import { toDateKey } from "../lib/dates";
 import type { JoinedFlowRow } from "../types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface AemoState {
   rows: JoinedFlowRow[];
+  firstDate: Date | null;
   lastDate: Date | null;
+  minKey: string;
+  maxKey: string;
   fetchedAt: string | null;
   fromCache: boolean;
   stale: boolean;
@@ -22,6 +26,7 @@ export interface AemoState {
 
 export function useAemoData(): AemoState {
   const [rows, setRows] = useState<JoinedFlowRow[]>([]);
+  const [firstDate, setFirstDate] = useState<Date | null>(null);
   const [lastDate, setLastDate] = useState<Date | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
@@ -35,23 +40,15 @@ export function useAemoData(): AemoState {
     setLoading(true);
     setError(null);
     try {
-      let payload: GbbPayload;
-      try {
-        payload = await fetchGbb(force);
-      } catch (first) {
-        if (force) {
-          payload = await fetchGbb(false);
-          payload.stale = true;
-          payload.warnings = [...(payload.warnings ?? []), String(first)];
-        } else {
-          throw first;
-        }
-      }
-      const flow = parseFlowCsv(payload.flowCsv);
+      const payload = await fetchGbb(force);
+      const flow = parseCompactFlow(payload.flowRows);
       const facilities = parseFacilitiesCsv(payload.facilitiesCsv);
       const joined = joinFlowWithFacilities(flow, facilities);
+      const first = firstGasDate(joined);
+      const last = lastGasDate(joined);
       setRows(joined);
-      setLastDate(lastGasDate(joined));
+      setFirstDate(first);
+      setLastDate(last);
       setFetchedAt(payload.fetchedAt);
       setFromCache(payload.fromCache);
       setStale(Boolean(payload.stale));
@@ -88,7 +85,10 @@ export function useAemoData(): AemoState {
 
   return {
     rows,
+    firstDate,
     lastDate,
+    minKey: firstDate ? toDateKey(firstDate) : "",
+    maxKey: lastDate ? toDateKey(lastDate) : "",
     fetchedAt,
     fromCache,
     stale,

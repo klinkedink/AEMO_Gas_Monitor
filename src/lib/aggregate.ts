@@ -1,7 +1,7 @@
 import type { FacilityRow, FlowRow, JoinedFlowRow, SeriesDef, SeriesPoint } from "../types";
 import { formatChartTick } from "./dates";
 import { indexFacilities } from "./facilities";
-import { isBeetaloo, isOriginAplng, isProd, isQgc, isSantosCsg } from "./operators";
+import { isBeetaloo, isLngExport, isOriginAplng, isProd, isQgc, isSantosCsg } from "./operators";
 
 export function joinFlowWithFacilities(flow: FlowRow[], facilities: FacilityRow[]): JoinedFlowRow[] {
   const index = indexFacilities(facilities);
@@ -29,20 +29,45 @@ export function lastGasDate(rows: { gasDate: Date }[]): Date | null {
   return rows.reduce((max, r) => (r.gasDate > max ? r.gasDate : max), rows[0].gasDate);
 }
 
-function allDateKeys(rows: JoinedFlowRow[]): string[] {
-  return [...new Set(rows.map((r) => r.gasDateKey))].sort();
+export function firstGasDate(rows: { gasDate: Date }[]): Date | null {
+  if (!rows.length) return null;
+  return rows.reduce((min, r) => (r.gasDate < min ? r.gasDate : min), rows[0].gasDate);
+}
+
+export function filterByDateWindow(rows: JoinedFlowRow[], startKey: string, endKey: string): JoinedFlowRow[] {
+  if (!startKey || !endKey) return rows;
+  return rows.filter((r) => r.gasDateKey >= startKey && r.gasDateKey <= endKey);
+}
+
+export function prodSupplyOnDate(rows: JoinedFlowRow[], dateKey: string): number {
+  let total = 0;
+  for (const row of rows) {
+    if (row.facilityType.toUpperCase() !== "PROD") continue;
+    if (row.gasDateKey !== dateKey) continue;
+    total += row.supply;
+  }
+  return total;
 }
 
 export function dateSpine(rows: JoinedFlowRow[]): string[] {
   return allDateKeys(rows);
 }
 
+function allDateKeys(rows: JoinedFlowRow[]): string[] {
+  return [...new Set(rows.map((r) => r.gasDateKey))].sort();
+}
+
 export function pivotStacked(
   rows: JoinedFlowRow[],
   seriesOf: (row: JoinedFlowRow) => string,
-  options?: { includeZeros?: boolean; dateKeys?: string[] },
+  options?: {
+    includeZeros?: boolean;
+    dateKeys?: string[];
+    getValue?: (row: JoinedFlowRow) => number;
+  },
 ): { data: SeriesPoint[]; keys: string[]; totals: Record<string, number> } {
   const dates = options?.dateKeys?.length ? options.dateKeys : allDateKeys(rows);
+  const getValue = options?.getValue ?? ((row: JoinedFlowRow) => row.supply);
   const totals: Record<string, number> = {};
   const byDate = new Map<string, Record<string, number>>();
   for (const d of dates) byDate.set(d, {});
@@ -51,8 +76,8 @@ export function pivotStacked(
     const key = seriesOf(row) || "Unknown";
     const bucket = byDate.get(row.gasDateKey);
     if (!bucket) continue;
-    bucket[key] = (bucket[key] ?? 0) + row.supply;
-    totals[key] = (totals[key] ?? 0) + row.supply;
+    bucket[key] = (bucket[key] ?? 0) + getValue(row);
+    totals[key] = (totals[key] ?? 0) + getValue(row);
   }
 
   let keys = Object.keys(totals).sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0));
@@ -98,6 +123,10 @@ export function originAplngProd(rows: JoinedFlowRow[]): JoinedFlowRow[] {
 
 export function beetalooProd(rows: JoinedFlowRow[]): JoinedFlowRow[] {
   return prodRows(rows).filter(isBeetaloo);
+}
+
+export function lngExportRows(rows: JoinedFlowRow[]): JoinedFlowRow[] {
+  return rows.filter(isLngExport);
 }
 
 export function operatorTotals(rows: JoinedFlowRow[]): JoinedFlowRow[] {

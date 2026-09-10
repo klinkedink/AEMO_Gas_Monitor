@@ -23,7 +23,15 @@ export function operatorColor(name: string, index: number): string {
   return OPERATOR_COLORS[name] ?? seriesColor(index);
 }
 
-/** Distinct hues for many facility series (golden-angle spacing). */
+const LNG_COLORS: Record<string, string> = {
+  "QCLNG LNG Plant": "#e0b33a",
+  "Australia Pacific LNG": "#5aa2d6",
+  "GLNG (Curtis Island)": "#d35f4c",
+};
+
+export function lngColor(name: string, index: number): string {
+  return LNG_COLORS[name] ?? seriesColor(index + 12);
+}
 export function seriesColor(index: number): string {
   const hue = (index * 137.508) % 360;
   const sat = 52 + (index % 4) * 7;

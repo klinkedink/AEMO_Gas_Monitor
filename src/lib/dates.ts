@@ -72,10 +72,43 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-export function formatChartTick(dateKey: string): string {
+export function addUtcDays(date: Date, days: number): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+}
+
+export function dateKeyToUtc(dateKey: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+}
+
+export function enumerateDateKeys(startKey: string, endKey: string): string[] {
+  const keys: string[] = [];
+  let cursor = dateKeyToUtc(startKey);
+  const end = dateKeyToUtc(endKey);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime()) || cursor > end) return keys;
+  while (cursor <= end) {
+    keys.push(toDateKey(cursor));
+    cursor = addUtcDays(cursor, 1);
+  }
+  return keys;
+}
+
+export function spanDays(startKey: string, endKey: string): number {
+  const a = dateKeyToUtc(startKey).getTime();
+  const b = dateKeyToUtc(endKey).getTime();
+  return Math.max(0, Math.round((b - a) / 86_400_000) + 1);
+}
+
+export function formatChartTick(dateKey: string, windowDays = 31): string {
   const [y, m, d] = dateKey.split("-").map(Number);
   if (!y || !m || !d) return dateKey;
+  if (windowDays > 800) return `${MONTHS[m - 1]} ${y}`;
+  if (windowDays > 60) return `${d} ${MONTHS[m - 1]} ${y}`;
   return `${d} ${MONTHS[m - 1]}`;
+}
+
+export function formatLongDateKey(dateKey: string): string {
+  return formatLongDate(dateKeyToUtc(dateKey));
 }
 
 export function formatLongDate(date: Date): string {

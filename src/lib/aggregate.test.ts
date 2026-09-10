@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { joinFlowWithFacilities, pivotStacked, prodRows, totalSupplyByDate } from "./aggregate";
+import { joinFlowWithFacilities, lngExportRows, pivotStacked, prodRows, totalSupplyByDate } from "./aggregate";
 import { parseGasDate, toDateKey } from "./dates";
 import type { FacilityRow, FlowRow } from "../types";
 
@@ -114,6 +114,26 @@ describe("aggregation", () => {
     expect(data).toHaveLength(2);
     expect(data[0]["Sturt Plateau Gas Plant"]).toBe(0);
     expect(data[1]["Sturt Plateau Gas Plant"]).toBe(22);
+  });
+
+  it("charts LNGEXPORT using Demand not Supply", () => {
+    const rows = joinFlowWithFacilities(
+      [
+        flow({
+          facilityId: "544272",
+          facilityType: "LNGEXPORT",
+          supply: 0,
+          facilityName: "QCLNG LNG Plant",
+        }),
+      ],
+      [fac({ facilityId: "544272", facilityName: "QCLNG LNG Plant", operatorName: "QCLNG Operating Company Pty Ltd" })],
+    );
+    rows[0].demand = 1461;
+    const { data, keys } = pivotStacked(lngExportRows(rows), (r) => r.displayName, {
+      getValue: (r) => r.demand,
+    });
+    expect(keys).toEqual(["QCLNG LNG Plant"]);
+    expect(data[0]["QCLNG LNG Plant"]).toBe(1461);
   });
 });
 

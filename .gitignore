@@ -1,5 +1,6 @@
 node_modules/
 dist/
+data/cache/*.zip
 data/cache/*.csv
 data/cache/*.json
 data/cache/*.meta

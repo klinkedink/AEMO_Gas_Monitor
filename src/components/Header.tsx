@@ -1,4 +1,5 @@
 import { formatDateTime, formatLongDate } from "../lib/dates";
+import { formatTj } from "../lib/format";
 
 interface Props {
   lastDate: Date | null;
@@ -16,20 +17,20 @@ export function Header({ lastDate, fetchedAt, fromCache, stale, loading, lastDay
       <div className="header-copy">
         <p className="eyebrow">Piet Clinckemalie · Gas Bulletin Board</p>
         <h1>Australian gas production monitor</h1>
-        <p className="lede">
-          PROD supply from AEMO GBB Actual Flow and Storage (last ~31 days). Units are terajoules per
-          gas day (TJ/d). PIPE, LNG and demand facilities are excluded from supply totals.
-        </p>
+        <p className="lede">Actual production as cited by AEMO GBB.</p>
       </div>
       <div className="header-status">
-        <div className="status-block">
-          <span className="status-label">Last gas date used</span>
-          <span className="status-value">{lastDate ? formatLongDate(lastDate) : loading ? "Loading…" : "—"}</span>
-          <span className="status-hint">
-            {Number.isFinite(lastDayTotal) && lastDate
-              ? `${lastDayTotal.toLocaleString("en-AU", { maximumFractionDigits: 1 })} TJ/d national PROD`
-              : "Max GasDate in loaded Last31 CSV"}
-          </span>
+        <div className="kpi-row">
+          <div className="status-block">
+            <span className="status-label">Last gas date used</span>
+            <span className="status-value">{lastDate ? formatLongDate(lastDate) : loading ? "Loading…" : "—"}</span>
+          </div>
+          <div className="status-block">
+            <span className="status-label">Total supply</span>
+            <span className="status-value">
+              {lastDate ? `${formatTj(lastDayTotal)} TJ/d` : loading ? "Loading…" : "—"}
+            </span>
+          </div>
         </div>
         <div className="status-block compact">
           <span className="status-label">Source refresh</span>
@@ -39,7 +40,7 @@ export function Header({ lastDate, fetchedAt, fromCache, stale, loading, lastDay
             {stale ? " · stale fallback" : ""}
           </span>
           <button type="button" className="refresh-btn" onClick={onRefresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? "Loading history…" : "Refresh"}
           </button>
         </div>
       </div>

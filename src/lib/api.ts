@@ -1,9 +1,11 @@
+import type { CompactFlowRow } from "./compact";
+
 export interface GbbPayload {
-  flowCsv: string;
+  flowRows: CompactFlowRow[];
   facilitiesCsv: string;
-  sources: { flow: string; facilities: string };
+  sources: { history: string; last31: string; facilities: string };
   fetchedAt: string;
-  facilitiesFetchedAt: string;
+  rowCount: number;
   fromCache: boolean;
   stale?: boolean;
   warnings?: string[];

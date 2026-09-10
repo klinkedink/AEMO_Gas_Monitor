@@ -8,6 +8,10 @@ export function isProd(row: { facilityType: string }): boolean {
   return row.facilityType.toUpperCase() === "PROD";
 }
 
+export function isLngExport(row: { facilityType: string }): boolean {
+  return row.facilityType.toUpperCase() === "LNGEXPORT";
+}
+
 export function isQgc(operatorName: string): boolean {
   return /qgc/i.test(operatorName);
 }
