@@ -102,6 +102,19 @@ describe("aggregation", () => {
     expect(data[0].QLD).toBe(1);
     expect(data[0].VIC).toBe(2);
   });
+
+  it("fills missing days with zero when a date spine is provided", () => {
+    const rows = joinFlowWithFacilities(
+      [flow({ facilityId: "580236", facilityType: "PROD", supply: 22, facilityName: "SPCF" })],
+      [fac({ facilityId: "580236", facilityName: "Sturt Plateau Gas Plant", operatorName: "Sturt Plateau" })],
+    );
+    const { data } = pivotStacked(prodRows(rows), (r) => r.displayName, {
+      dateKeys: ["2026-09-08", "2026-09-09"],
+    });
+    expect(data).toHaveLength(2);
+    expect(data[0]["Sturt Plateau Gas Plant"]).toBe(0);
+    expect(data[1]["Sturt Plateau Gas Plant"]).toBe(22);
+  });
 });
 
 describe("dates", () => {

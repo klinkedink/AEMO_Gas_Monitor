@@ -33,12 +33,16 @@ function allDateKeys(rows: JoinedFlowRow[]): string[] {
   return [...new Set(rows.map((r) => r.gasDateKey))].sort();
 }
 
+export function dateSpine(rows: JoinedFlowRow[]): string[] {
+  return allDateKeys(rows);
+}
+
 export function pivotStacked(
   rows: JoinedFlowRow[],
   seriesOf: (row: JoinedFlowRow) => string,
-  options?: { includeZeros?: boolean },
+  options?: { includeZeros?: boolean; dateKeys?: string[] },
 ): { data: SeriesPoint[]; keys: string[]; totals: Record<string, number> } {
-  const dates = allDateKeys(rows);
+  const dates = options?.dateKeys?.length ? options.dateKeys : allDateKeys(rows);
   const totals: Record<string, number> = {};
   const byDate = new Map<string, Record<string, number>>();
   for (const d of dates) byDate.set(d, {});
@@ -68,8 +72,11 @@ export function pivotStacked(
   return { data, keys, totals };
 }
 
-export function totalSupplyByDate(rows: JoinedFlowRow[]): { data: SeriesPoint[]; keys: string[] } {
-  const { data, keys } = pivotStacked(rows, () => "Total supply");
+export function totalSupplyByDate(
+  rows: JoinedFlowRow[],
+  dateKeys?: string[],
+): { data: SeriesPoint[]; keys: string[] } {
+  const { data, keys } = pivotStacked(rows, () => "Total supply", { dateKeys });
   return { data, keys };
 }
 

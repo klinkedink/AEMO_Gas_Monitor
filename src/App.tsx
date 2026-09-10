@@ -4,6 +4,7 @@ import { SupplyChart } from "./components/SupplyChart";
 import { useAemoData } from "./hooks/useAemoData";
 import {
   beetalooProd,
+  dateSpine,
   operatorTotals,
   originAplngProd,
   prodRows,
@@ -34,29 +35,32 @@ export default function App() {
     useAemoData();
 
   const prod = prodRows(rows);
-  const total = totalSupplyByDate(prod);
+  const dates = dateSpine(prod);
+  const total = totalSupplyByDate(prod, dates);
   const lastDayTotal = total.data.length ? sumPoint(total.data[total.data.length - 1], total.keys) : 0;
 
-  const byState = pivotStacked(prod, (r) => r.state || "Unknown");
+  const byState = pivotStacked(prod, (r) => r.state || "Unknown", { dateKeys: dates });
   const stateKeys = sortStates(byState.keys);
 
   const qgc = qgcProd(rows);
-  const qgcPivot = pivotStacked(qgc, (r) => r.displayName);
+  const qgcPivot = pivotStacked(qgc, (r) => r.displayName, { dateKeys: dates });
 
   const santos = santosCsgProd(rows);
-  const santosPivot = pivotStacked(santos, (r) => r.displayName);
+  const santosPivot = pivotStacked(santos, (r) => r.displayName, { dateKeys: dates });
 
   const origin = originAplngProd(rows);
-  const originPivot = pivotStacked(origin, (r) => r.displayName);
+  const originPivot = pivotStacked(origin, (r) => r.displayName, { dateKeys: dates });
 
   const ops = operatorTotals(rows);
-  const opsPivot = pivotStacked(ops, (r) => r.displayName);
+  const opsPivot = pivotStacked(ops, (r) => r.displayName, { dateKeys: dates });
   const opKeys = ["QGC", "Santos CSG", "Origin / APLNG"].filter((k) => opsPivot.keys.includes(k));
 
   const beet = beetalooProd(rows);
-  const beetPivot = pivotStacked(beet, (r) => r.operatorName || r.displayName);
+  const beetPivot = pivotStacked(beet, (r) => beetalooLabel(r.operatorName || r.displayName), {
+    dateKeys: dates,
+  });
 
-  const allPivot = pivotStacked(prod, (r) => r.displayName);
+  const allPivot = pivotStacked(prod, (r) => r.displayName, { dateKeys: dates });
 
   return (
     <div className="app">
@@ -222,4 +226,9 @@ function lastDaySlice(
   if (!data.length) return "0";
   const n = sumPoint(data[data.length - 1], keys);
   return n.toLocaleString("en-AU", { maximumFractionDigits: 1 });
+}
+
+function beetalooLabel(operatorName: string): string {
+  if (/sturt plateau/i.test(operatorName)) return "Sturt Plateau";
+  return operatorName || "Beetaloo";
 }

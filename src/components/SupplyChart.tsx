@@ -91,6 +91,8 @@ export function SupplyChart({ data, series, stacked = true, scrollLegend = false
               tickLine={false}
               axisLine={false}
               width={56}
+              domain={[0, "auto"]}
+              allowDecimals={false}
               tickFormatter={(v: number) => formatTj(v)}
             />
             <Tooltip
