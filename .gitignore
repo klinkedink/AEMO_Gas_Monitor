@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/cache/*.csv
+data/cache/*.json
+data/cache/*.meta
+!data/cache/.gitkeep
+.DS_Store
+*.log
+.vscode/
+.idea/
+.env
+.env.local
